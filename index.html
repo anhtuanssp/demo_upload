@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>DEMO UPLOAD</title>
+    <link rel="stylesheet" href="">
+    <link href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.0/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="jumbotron">
+        <div class="container">
+            <h2>Demo Upload File With Resumable When Close Browser</h2>
+            <p>Demo resumable upload</p>
+            <p>
+                <input type="file" name="file" id="ff" value="" placeholder="Choose file">
+                <hr>
+                <button type="button" class="btn btn-primary" id="upload">Upload</button>
+                <button type="button" class="btn btn-default" id="reupload" style="display:none">Re-Upload</button>
+            </p>
+
+            <div class="progress">
+              <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                
+              </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="jumbotron">
+        <div class="container">
+            <h1>Multi Upload</h1>
+            <div class="upload-container">
+                <div id="upload-container-manager">
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.0/js/bootstrap.min.js"></script>
+    <script src="q.js"></script>
+    <script src="LargeLocalStorage.js"></script>
+    <!--<script src="upload.js"></script>-->
+
+    <script src="upload.v2.js"></script>
+
+    <script type="text/javascript">
+        var up = new UPLOAD_MANAGER('#upload-container-manager');
+        up.init();
+    </script>
+</body>
+
+</html>
