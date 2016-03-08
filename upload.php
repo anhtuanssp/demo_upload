@@ -56,7 +56,9 @@ function createFileFromChunks($temp_dir, $fileName, $chunkSize, $totalSize,$tota
     // If the Size of all the chunks on the server is equal to the size of the file uploaded.
     if ($total_files_on_server_size >= $totalSize) {
     // create the final destination file 
-        if (($fp = fopen('upload/test-'.$fileName, 'w')) !== false) {
+        $d = new DateTime();
+        $tt = $d->getTimestamp();
+        if (($fp = fopen('upload/'.$tt.'-'.$fileName, 'w')) !== false) {
             for ($i=0; $i<$total_files; $i++) {
                 fwrite($fp, file_get_contents($temp_dir.'/'.$fileName.'.part'.$i));
                 // _log('writing chunk '.$i);
@@ -67,8 +69,8 @@ function createFileFromChunks($temp_dir, $fileName, $chunkSize, $totalSize,$tota
             return false;
         }
 
-        // rename the temporary directory (to avoid access from other 
-        // concurrent chunks uploads) and than delete it
+        // // rename the temporary directory (to avoid access from other 
+        // // concurrent chunks uploads) and than delete it
         if (rename($temp_dir, $temp_dir.'_UNUSED')) {
             rrmdir($temp_dir.'_UNUSED');
         } else {
