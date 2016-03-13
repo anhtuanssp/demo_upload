@@ -62,7 +62,9 @@ var UPLOAD_MANAGER = (function() {
                 .css({
                     width: '100%',
                     'min-height': '200px',
-                    border: '1px solid #fafafa'
+                    "background" : '#EDEDED',
+                    padding : '10px'
+                    // border: '1px solid #fafafa'
                 });
             $(that.id)
                 .find('.' + _CONSTANT.class_list)
@@ -137,7 +139,7 @@ var UPLOAD_MANAGER = (function() {
         this.init = initFunction;
         this._uploadStart = _uploadStart
 
-        this.BYTES_PER_CHUNK = 1048576;
+        this.BYTES_PER_CHUNK = 1048576 * 1;
         this.SIZE = file.size;
         this.NUM_CHUNKS = Math.max(Math.ceil(this.SIZE / this.BYTES_PER_CHUNK), 1);
         this.start = 0;
@@ -147,6 +149,11 @@ var UPLOAD_MANAGER = (function() {
         this.uploaders = [];
         this.processTotal = 0;
         this.$elProcess = null;
+
+        this.isPause = false;
+
+        this.uploadedPart = null;
+        this.isPartFile = 0;
 
         this.getSliceMethod = function() {
             if ('mozSlice' in this.file) {
@@ -160,15 +167,22 @@ var UPLOAD_MANAGER = (function() {
 
 
         this.html_tmpl = [
-            '<div class="file-item col-sm-4">',
-            '<p><b class="file-name"></b></p>',
-            '<p class="file-size"></p>',
-            '<div class="progress">',
-            '<div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">',
-
-            '</div>',
-            '</div>',
-            '<div><button class="btn btn-default btn-upload">Upload</button></div>',
+            '<div class="file-item col-sm-12" style="color:#939393;background: #424242;padding: 20px; margin-top: 10px;box-shadow:0 2px 5px rgba(0,0,0,0.26)">',
+                '<p><b class="file-name"></b></p>',
+                '<p class="file-size"></p>',
+                '<div class="row">',
+                    '<div class="col-sm-12">',
+                        '<div class="progress">',
+                            '<div class="progress-bar progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">',
+                            '</div>',
+                        '</div>',
+                    '</div>',
+                    '<div class="col-sm-12 text-center">',
+                        '<button class="btn btn-primary btn-upload"><span class="glyphicon glyphicon-play"></span> <span>upload</span></button>',
+                        ' <button class="btn btn-default btn-pause"><span class="glyphicon glyphicon-pause"></span> <span>pause</span></button>',
+                        ' <button class="btn btn-danger btn-remove"><span class="glyphicon glyphicon-trash"></span> <span>delete</span></button>',
+                    '</div>',
+                '</div>',
             '</div>'
         ].join('');
 
@@ -185,26 +199,46 @@ var UPLOAD_MANAGER = (function() {
 
             that.$el = $(that.html_tmpl);
             that.$el.find('.file-name').html(file.name)
-            that.$el.find('.file-size').html((file.size / ( 1024 * 1024)).toFixed(1)+ 'MB')
+            that.$el.find('.file-size').html((file.size / (1024 * 1024)).toFixed(1) + 'MB')
 
             that.$el.find('.btn-upload')
-                .click(that._uploadStart);
+                .click(function(d) {
+                    that.isPause = false;
+                    that._uploadStart();
+                });
+            that.$el.find('.btn-pause')
+                .click(function() {
+                    that.isPause = !that.isPause;
+                })
+            that.$el.find('.btn-remove')
+                .click(that.removeFile.bind(this));
 
             that.$elProcess = that.$el.find('.progress-bar');
+
+            //check file is uploading or new
+
+            $.post(this.url, JSON.stringify({ filename: file.name, indentify_key: 'IDENTIFY_UPLOAD' }), function(data, textStatus, xhr) {
+                if (data.size > 0) {
+                    that.reInitUpload(data);
+                }
+
+            });
 
             return that;
         }
 
-        function _uploadStart(e) {
+        function _uploadStart() {
             that.slice_method = that.getSliceMethod();
-            var i = 0;
-            while (that.start < that.SIZE) {
-                that.uploadPerBlob(that.file.slice(that.start, that.end), i);
-                // console.log(this.file.slice(this.start, this.end))
-                that.start = that.end;
-                that.end = that.start + that.BYTES_PER_CHUNK;
-                i++;
+            if (that.start < that.SIZE) {
+                that.uploadPerBlob(that.file.slice(that.start, that.end), that.isPartFile);
             }
+            // send all request if file small
+            // while (that.start < that.SIZE) {
+            //      that.uploadPerBlob(that.file.slice(that.start, that.end),i);
+            //      that.start = that.end;
+            //      that.end = that.start + that.BYTES_PER_CHUNK;
+            //      i++;
+            // }
         }
 
         this.uploadPerBlob = function(blobOrFile, i) {
@@ -218,6 +252,7 @@ var UPLOAD_MANAGER = (function() {
 
             xhr.setRequestHeader('PART', i);
             xhr.setRequestHeader('KEY_NAME', this.file.name);
+            xhr.setRequestHeader('UPLOAD_IDENTIFY', this.file.name + 'IDENTIFY_UPLOAD');
             xhr.setRequestHeader('CHUNK_FILE_SIZE', blobOrFile.size);
             xhr.setRequestHeader('TOTAL_SIZE', this.file.size);
             xhr.setRequestHeader('TOTAL_CHUNK', this.NUM_CHUNKS);
@@ -226,22 +261,41 @@ var UPLOAD_MANAGER = (function() {
 
             };
             xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    that.processTotal = that.processTotal + 1;
-                    that.updateProcessBar();
-                    var data = xhr.response;
-                    if (data != '') {
-                        try {
-                            data = JSON.parse(data);
-                            if (data.upload == 'success') {
-                                that.uploadSuccess();
-                            }
-                        } catch (e) {
-                            
-                            console.log(e);
-                        }
+                if ((xhr.readyState == 4)) {
+                    if (xhr.status == 200) {
+                        that.processTotal = that.processTotal + 1;
+                        that.updateProcessBar();
+                        var data = xhr.response;
+                        if (data != '') {
+                            try {
+                                data = JSON.parse(data);
+                                if (data.upload == 'success') {
+                                    that.uploadSuccess();
+                                }
+                            } catch (e) {
 
+                                console.log(e);
+                            }
+
+                        } else {
+                            that.start = that.end;
+                            that.end = that.start + that.BYTES_PER_CHUNK;
+                            that.isPartFile++;
+                            if (!that.isPause) {
+                                _uploadStart();
+                            }
+
+                        }
+                    } else {
+                        if (that.isPartFile != 0) {
+                            that.isPartFile--;
+                            that.start = that.isPartFile * that.BYTES_PER_CHUNK;
+                            that.end = that.start + that.BYTES_PER_CHUNK;
+                        }
                     }
+
+                } else {
+
                 }
             }
             xhr.onloadend = function(e) {
@@ -252,14 +306,27 @@ var UPLOAD_MANAGER = (function() {
             };
             that.uploaders.push(xhr);
             xhr.send(blobOrFile);
-            
-            
+        }
+
+        this.reInitUpload = function(data) {
+            var percent = (data.size / this.SIZE) * 100;
+            this.processTotal = data.part.length - 2;
+            this.uploadedPart = data.part;
+
+            this.isPartFile = data.part.length - 3;
+            this.start = this.BYTES_PER_CHUNK * this.isPartFile;
+            this.end = that.start + that.BYTES_PER_CHUNK;
+
+            this.$elProcess.css({
+                width: percent + '%'
+            });
+            this.$el.find('.btn-upload span').eq(1).html('resume')
         }
 
         this.updateProcessBar = function() {
             var percent = (this.processTotal / this.NUM_CHUNKS) * 100;
             this.$elProcess.css({
-                width: percent + '%',
+                width: percent + '%'
             });
         }
 
@@ -267,17 +334,20 @@ var UPLOAD_MANAGER = (function() {
             // alert('upload success');
             this.parentInstance.storage
                 .rmAttachment(this.parentInstance.attachmentName, this.file.name)
-                .then(function(){
+                .then(function() {
                     that.$el.fadeOut(2500);
                 })
 
         }
 
-        this.checkProcessUpload = function(index) {
-            var flag = false;
-
-            return flag;
+        this.removeFile = function(){
+            this.parentInstance.storage
+                .rmAttachment(this.parentInstance.attachmentName, this.file.name)
+                .then(function() {
+                    that.$el.fadeOut(2500);
+                })
         }
+
 
         return this;
     }

@@ -1,5 +1,5 @@
 <?php 
-error_reporting(E_ALL ^ E_NOTICE);
+error_reporting(E_ALL ^ E_NOTICE ^ E_WARNING);
 /**
  *
  * Logging operation - to a file (upload_log.txt) and to the stdout
@@ -47,9 +47,11 @@ function createFileFromChunks($temp_dir, $fileName, $chunkSize, $totalSize,$tota
     // count all the parts of this file
     $total_files_on_server_size = 0;
     $temp_total = 0;
+
     foreach(scandir($temp_dir) as $file) {
         $temp_total = $total_files_on_server_size;
         $tempfilesize = filesize($temp_dir.'/'.$file);
+
         $total_files_on_server_size = $temp_total + $tempfilesize;
     }
     // check that all the parts are present
@@ -83,33 +85,78 @@ function createFileFromChunks($temp_dir, $fileName, $chunkSize, $totalSize,$tota
 
 }
 
-$re_header = getallheaders();
+function checkTotalSizeFile($temp_dir) {
 
+    // count all the parts of this file
+    $total_files_on_server_size = 0;
+    $temp_total = 0;
+    $parts = array();
+
+    try {
+        foreach(scandir($temp_dir) as $file) {
+            $temp_total = $total_files_on_server_size;
+            $tempfilesize = filesize($temp_dir.'/'.$file);
+            if($tempfilesize > 0){
+
+                $filename = basename($temp_dir.'/'.$file);
+                $tmp = array("part"=>$filename,"size"=>$tempfilesize);
+                array_push($parts, $tmp);
+            
+            }
+            $total_files_on_server_size = $temp_total + $tempfilesize;
+        }
+    } catch (Exception $e) {
+        
+    }
+
+    $array_result = array("size"=>$total_files_on_server_size,"part"=>$parts);
+
+
+    return $array_result;
+
+}
+
+$re_header = getallheaders();
 $part = $re_header['PART'];
 $key = $re_header['KEY_NAME'];
+$keyIdentify = $re_header['UPLOAD_IDENTIFY'];
 $chunkFileSize =  $re_header['CHUNK_FILE_SIZE'];
 $totalSize =  $re_header['TOTAL_SIZE'];
 $totalChunk =  $re_header['TOTAL_CHUNK'];
 
 $post = file_get_contents('php://input');
-// init the destination file (format <filename.ext>.part<#chunk>
-// the file is stored in a temporary directory
-if(isset($part) && trim($key)!=''){
-    $temp_dir = 'upload/'.$key;
-}
-$dest_file = $temp_dir.'/'.$key.'.part'.$part;
-// create the temporary directory
 
-if (!is_dir($temp_dir)) {
-    mkdir($temp_dir, 0777, true);
+if(isset($key) && $key != null){
+    // init the destination file (format <filename.ext>.part<#chunk>
+    // the file is stored in a temporary directory
+    if(isset($part) && trim($key)!=''){
+        $temp_dir = 'upload/'.$keyIdentify;
+    }
+    $dest_file = $temp_dir.'/'.$key.'.part'.$part;
+    // create the temporary directory
+
+    if (!is_dir($temp_dir)) {
+        mkdir($temp_dir, 0777, true);
+    }
+
+    // move the temporary file
+
+    if (!file_put_contents($dest_file, $post)) {
+        _log('Error saving (move_uploaded_file) chunk '.$part.' for file '.$key);
+    } else {
+        // check if all the parts present, and create the final destination file
+        createFileFromChunks($temp_dir, $key ,$chunkFileSize, $totalSize , $totalChunk);
+    }
+}else{
+    $postE = json_decode($post);
+    $temp_dir = 'upload/'.$postE->filename.$postE->indentify_key;
+
+    $total = checkTotalSizeFile($temp_dir);
+
+    header('Content-Type: application/json');
+    echo json_encode($total);
 }
 
-// move the temporary file
 
-if (!file_put_contents($dest_file, $post)) {
-    _log('Error saving (move_uploaded_file) chunk '.$part.' for file '.$key);
-} else {
-    // check if all the parts present, and create the final destination file
-    createFileFromChunks($temp_dir, $key ,$chunkFileSize, $totalSize , $totalChunk);
-}
+
  ?>
